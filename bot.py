@@ -42,8 +42,11 @@ def send_mail(subject, text, screenshot_path, pdf_path=None):
 
 def clean_old_files(pattern):
     for f in glob.glob(pattern):
-        try: os.remove(f); print("Silindi:", f)
-        except: pass
+        try:
+            os.remove(f)
+            print("Silindi:", f)
+        except:
+            pass
 
 # ==========================
 # Selenium / Chrome
@@ -67,34 +70,40 @@ driver = webdriver.Chrome(service=service, options=options)
 # ==========================
 # Yardımcılar
 # ==========================
-def hard_refresh():
-    driver.get(config.URL)
+def page_ready(timeout=15):
     try:
-        WebDriverWait(driver, 12).until(
+        WebDriverWait(driver, timeout).until(
             lambda d: d.execute_script("return document.readyState") == "complete"
         )
     except TimeoutException:
         pass
+
+def hard_refresh():
+    driver.get(config.URL)
+    page_ready(15)
     time.sleep(0.8)
 
 def js_click(el):
     driver.execute_script("arguments[0].click();", el)
 
-def try_login():
-    """Login sayfası varsa giriş yapar."""
+def full_login():
+    """Her döngüde sıfırdan login yapar (gerekirse)."""
+    driver.get(config.URL)
+    page_ready(20)
     try:
-        u = driver.find_element(By.ID, "inputUsername")
+        u = WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.ID, "inputUsername"))
+        )
         p = driver.find_element(By.ID, "inputPassword")
         b = driver.find_element(By.CLASS_NAME, "login_btn")
         u.clear(); p.clear()
-        u.send_keys(config.USERNAME); p.send_keys(config.PASSWORD); js_click(b)
-        print(">>> Login yapıldı.")
-        WebDriverWait(driver, 10).until(
-            lambda d: d.execute_script("return document.readyState") == "complete"
-        )
-        time.sleep(0.5)
-    except NoSuchElementException:
-        pass  # zaten login
+        u.send_keys(config.USERNAME); p.send_keys(config.PASSWORD)
+        js_click(b)
+        page_ready(20)
+        print(">>> Login tamamlandı.")
+    except TimeoutException:
+        # login alanı yoksa zaten içerideyiz
+        print(">>> Zaten loginli, devam.")
 
 def open_fe_modal():
     """Field Elective modalını aç ve tam yüklenmesini bekle."""
@@ -104,26 +113,23 @@ def open_fe_modal():
     js_click(fe)
     print(">>> Field Elective SEÇ butonuna basıldı.")
 
-    # Modalın gerçekten açılmasını bekle
     WebDriverWait(driver, 15).until(
         EC.visibility_of_element_located((By.XPATH, "//div[contains(@class,'modal') and contains(@class,'show')]"))
     )
     WebDriverWait(driver, 15).until(
-        EC.presence_of_all_elements_located((By.XPATH,
-            "//div[contains(@class,'modal') and contains(@class,'show')]//table//tr"))
+        EC.presence_of_all_elements_located((By.XPATH, "//div[contains(@class,'modal') and contains(@class,'show')]//table//tr"))
     )
-    time.sleep(1)  #
+    time.sleep(0.6)
 
 def click_salman_in_modal():
     """Açık modaldaki SALMAN satırındaki 'Şubeyi Seç'e bas."""
     try:
-        row = WebDriverWait(driver, 12).until(EC.presence_of_element_located((
+        row = WebDriverWait(driver, 15).until(EC.presence_of_element_located((
             By.XPATH,
             "//div[contains(@class,'modal') and contains(@class,'show')]"
             "//tr[td[contains(translate(normalize-space(.), "
             "'ABCDEFGHIJKLMNOPQRSTUVWXYZÇĞİÖŞÜÂÎÛ', 'abcdefghijklmnopqrstuvwxyzçğiöşüâîû'), 'salman')]]"
         )))
-        # 'Şubeyi Seç' / 'Seç' butonu
         try:
             btn = row.find_element(By.XPATH, ".//button[contains(translate(., 'ÇĞİÖŞÜÂÎÛAEIOU', 'çğiöşüâîûaeiou'),'seç')]")
         except NoSuchElementException:
@@ -155,26 +161,23 @@ def force_close_modal():
                 driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
             except Exception:
                 pass
-    # görünmez olana kadar bekle (olmazsa devamında hard refresh yapılır)
+
+    # kapanmayı bekle
     try:
-        WebDriverWait(driver, 5).until_not(
+        WebDriverWait(driver, 6).until_not(
             EC.visibility_of_element_located((By.XPATH, "//div[contains(@class,'modal') and contains(@class,'show')]"))
         )
         print(">>> Modal kapandı.")
-        # 🔑 DOM stabilize olsun
-        WebDriverWait(driver, 10).until(
-            lambda d: d.execute_script("return document.readyState") == "complete"
-        )
-        time.sleep(2)  # ekstra buffer
+        page_ready(10)
+        time.sleep(1.5)
     except TimeoutException:
         print("❌ Modal kapanmadı (hard refresh).")
         hard_refresh()
 
 def close_alert_and_modal_then_reset():
-    """SweetAlert 'Tamam' → modalı kapat → hard refresh ile sıfırla."""
-    # Tamam
+    """SweetAlert 'Tamam' → modalı kapat → tamamen temiz başlangıç."""
     try:
-        ok = WebDriverWait(driver, 6).until(
+        ok = WebDriverWait(driver, 8).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, "button.swal2-confirm.swal2-styled"))
         )
         js_click(ok)
@@ -182,19 +185,15 @@ def close_alert_and_modal_then_reset():
     except TimeoutException:
         print("❌ Tamam butonu bulunamadı!")
 
-    # Alert kaybolsun
     try:
-        WebDriverWait(driver, 4).until(
+        WebDriverWait(driver, 5).until(
             EC.invisibility_of_element_located((By.ID, "swal2-content"))
         )
     except TimeoutException:
         pass
 
-    # Şube Listesi modalını kapat
-    force_close_modal()
-
-    # En sonda temiz başlangıç
-    hard_refresh()
+    force_close_modal()     # modalı kapat
+    full_login()            # en temizi: yeniden girişle sıfır başla
 
 def download_ders_programi_pdf(filename):
     ders_prog_btn = WebDriverWait(driver, 12).until(
@@ -217,28 +216,26 @@ def download_ders_programi_pdf(filename):
 # ==========================
 # Başlat
 # ==========================
-hard_refresh()
-try_login()
+full_login()
 
 last_mail_time = 0
 while True:
     try:
-        try_login()
-        hard_refresh()
+        # Her tur temiz başlangıç
+        full_login()
 
         # 1) Modalı aç
         open_fe_modal()
 
-        # 2) SALMAN satırını tıkla; bulunamazsa başa dön (temizle)
+        # 2) SALMAN satırını tıkla; bulunamazsa başa dön
         if not click_salman_in_modal():
             force_close_modal()
-            hard_refresh()
             continue
 
         # 3) Kontenjan alert var mı?
         had_alert = False
         try:
-            warn = WebDriverWait(driver, 2).until(
+            warn = WebDriverWait(driver, 3).until(
                 EC.presence_of_element_located((By.ID, "swal2-content"))
             )
             if "Kontenjanı kalmadığı için" in warn.text:
@@ -250,7 +247,7 @@ while True:
             print("⚠️ Kontenjan yok!")
 
             now = time.time()
-            if now - last_mail_time > 600:
+            if now - last_mail_time > 600:  # 10 dk
                 clean_old_files("kontenjan_yok_*.png")
                 clean_old_files(os.path.join(download_dir, "ders_programi_*.pdf"))
                 ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -281,6 +278,7 @@ while True:
 
     except Exception as e:
         print(f"Hata oluştu: {e.__class__.__name__}: {e}")
-        hard_refresh()
-        time.sleep(1.5)
+        # En sert sıfırlama: yeniden login
+        full_login()
+        time.sleep(1.2)
         continue
