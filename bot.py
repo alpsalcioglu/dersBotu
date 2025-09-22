@@ -60,8 +60,17 @@ def clean_old_files(pattern):
             pass
 
 # --- Selenium ayarları ---
+download_dir = os.path.abspath("./pdfs")
+os.makedirs(download_dir, exist_ok=True)
+
 options = webdriver.ChromeOptions()
-options.add_argument("--headless")
+prefs = {
+    "download.default_directory": download_dir,
+    "download.prompt_for_download": False,
+    "plugins.always_open_pdf_externally": True
+}
+options.add_experimental_option("prefs", prefs)
+options.add_argument("--headless=new")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 
@@ -86,12 +95,29 @@ def try_login():
     except NoSuchElementException:
         pass
 
-# PDF kaydetme fonksiyonu (Chrome CDP)
-def save_page_as_pdf(filename):
-    pdf = driver.execute_cdp_cmd("Page.printToPDF", {"format": "A4"})
-    with open(filename, "wb") as f:
-        f.write(base64.b64decode(pdf['data']))
-    return filename
+# Ders Programı PDF indirme fonksiyonu
+def download_ders_programi_pdf(filename):
+    clean_old_files(os.path.join(download_dir, "ders_programi_*.pdf"))
+
+    # 1) Ders Programı ikonuna tıkla
+    ders_prog_btn = driver.find_element(By.CSS_SELECTOR, "button.solbtn")
+    ders_prog_btn.click()
+    time.sleep(2)
+
+    # 2) Yazdır butonuna tıkla
+    yazdir_btn = driver.find_element(By.CSS_SELECTOR, "button.btn.btn-info")
+    yazdir_btn.click()
+    time.sleep(5)  # PDF inmesi için bekle
+
+    # 3) İndirilen dosyayı yeniden adlandır
+    downloads = os.listdir(download_dir)
+    for f in downloads:
+        if f.endswith(".pdf"):
+            new_path = os.path.join(download_dir, filename)
+            os.rename(os.path.join(download_dir, f), new_path)
+            print(f"PDF kaydedildi: {new_path}")
+            return new_path
+    return None
 
 # İlk giriş denemesi
 try_login()
@@ -133,14 +159,12 @@ while True:
                 now = time.time()
                 if now - last_mail_time > 600:  
                     clean_old_files("kontenjan_yok_*.png")
-                    clean_old_files("kontenjan_yok_*.pdf")
 
                     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                     screenshot = f"kontenjan_yok_{timestamp}.png"
-                    pdf_file = f"ders_programi_{timestamp}.pdf"
-
                     driver.save_screenshot(screenshot)
-                    save_page_as_pdf(pdf_file)
+
+                    pdf_file = download_ders_programi_pdf(f"ders_programi_{timestamp}.pdf")
 
                     send_mail("Kontenjan Hâlâ Dolu",
                               "Kontenjan açılmadı, ders seçilemedi.",
@@ -157,14 +181,12 @@ while True:
             print("🎉 Ders başarıyla seçildi!")
 
             clean_old_files("ders_secilmis_*.png")
-            clean_old_files("ders_secilmis_*.pdf")
 
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             screenshot = f"ders_secilmis_{timestamp}.png"
-            pdf_file = f"ders_programi_{timestamp}.pdf"
-
             driver.save_screenshot(screenshot)
-            save_page_as_pdf(pdf_file)
+
+            pdf_file = download_ders_programi_pdf(f"ders_programi_{timestamp}.pdf")
 
             send_mail("SEÇİLDİ BU İŞ TAMAMDIR KOÇUM!",
                       "Ders başarıyla seçildi! Artık uğraşma 🎉",
