@@ -1,4 +1,5 @@
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.support.ui import WebDriverWait
@@ -9,37 +10,29 @@ import config
 # --- Mailjet ayarları ---
 MAILJET_API_KEY = "62ae372b1aae93e0953e208ced02632e"
 MAILJET_SECRET_KEY = "2193f70c14fb7ffcbef74740c8d33492"
-MAIL_FROM = "alpsalcioglu10@gmail.com"   # Gönderen mail
-MAIL_TO = "alpsalcioglu10@gmail.com"     # Alıcı mail
+MAIL_FROM = "alpsalcioglu10@gmail.com"
+MAIL_TO = "alpsalcioglu10@gmail.com"
 
 def send_mail(subject, text, screenshot_path):
-    """Mailjet ile mail gönder (ekran görüntüsü ekli)."""
     with open(screenshot_path, "rb") as f:
         file_data = base64.b64encode(f.read()).decode("utf-8")
     filename = screenshot_path.split("/")[-1]
 
     url = "https://api.mailjet.com/v3.1/send"
     payload = {
-        "Messages":[
+        "Messages": [
             {
-                "From": {
-                    "Email": MAIL_FROM,
-                    "Name": "Ders Bot"
-                },
-                "To": [
-                    {
-                        "Email": MAIL_TO
-                    }
-                ],
+                "From": {"Email": MAIL_FROM, "Name": "Ders Bot"},
+                "To": [{"Email": MAIL_TO}],
                 "Subject": subject,
                 "TextPart": text,
                 "Attachments": [
                     {
                         "ContentType": "image/png",
                         "Filename": filename,
-                        "Base64Content": file_data
+                        "Base64Content": file_data,
                     }
-                ]
+                ],
             }
         ]
     }
@@ -47,9 +40,7 @@ def send_mail(subject, text, screenshot_path):
     r = requests.post(url, auth=(MAILJET_API_KEY, MAILJET_SECRET_KEY), json=payload)
     print("Mail gönderildi:", r.status_code, r.text)
 
-
 def clean_old_screenshots(pattern):
-    """Belirli tipteki eski ekran görüntülerini siler."""
     for f in glob.glob(pattern):
         try:
             os.remove(f)
@@ -57,16 +48,19 @@ def clean_old_screenshots(pattern):
         except:
             pass
 
-
 # --- Selenium ayarları ---
 options = webdriver.ChromeOptions()
-options.add_argument("--headless")  # tarayıcı açmadan
+options.add_argument("--headless")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 
-driver = webdriver.Chrome(executable_path="/snap/bin/chromium.chromedriver", options=options)
+service = Service("/snap/bin/chromium.chromedriver")
+driver = webdriver.Chrome(service=service, options=options)
+
 driver.get(config.URL)
 driver.maximize_window()
+
+# --- geri kalan kod aynı ---
 
 # Login gerekiyorsa sadece o zaman yap
 try:
