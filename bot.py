@@ -64,7 +64,7 @@ options.add_argument("--headless")  # tarayıcı açmadan
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 
-driver = webdriver.Chrome(options=options)
+driver = webdriver.Chrome(executable_path="/snap/bin/chromium.chromedriver", options=options)
 driver.get(config.URL)
 driver.maximize_window()
 
