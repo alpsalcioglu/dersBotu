@@ -97,27 +97,28 @@ def try_login():
 
 # Ders Programı PDF indirme fonksiyonu
 def download_ders_programi_pdf(filename):
-    clean_old_files(os.path.join(download_dir, "ders_programi_*.pdf"))
-
-    # 1) Ders Programı ikonuna tıkla
+    # Önce Ders Programı aç
     ders_prog_btn = driver.find_element(By.CSS_SELECTOR, "button.solbtn")
     ders_prog_btn.click()
     time.sleep(2)
 
-    # 2) Yazdır butonuna tıkla
+    # Yazdır butonuna bas
     yazdir_btn = driver.find_element(By.CSS_SELECTOR, "button.btn.btn-info")
     yazdir_btn.click()
-    time.sleep(5)  # PDF inmesi için bekle
+    time.sleep(2)
 
-    # 3) İndirilen dosyayı yeniden adlandır
-    downloads = os.listdir(download_dir)
-    for f in downloads:
-        if f.endswith(".pdf"):
-            new_path = os.path.join(download_dir, filename)
-            os.rename(os.path.join(download_dir, f), new_path)
-            print(f"PDF kaydedildi: {new_path}")
-            return new_path
-    return None
+    # Burada normalde print preview açılır ama biz CDP ile direkt PDF alıyoruz
+    pdf = driver.execute_cdp_cmd("Page.printToPDF", {
+        "format": "A4",
+        "printBackground": True
+    })
+
+    pdf_path = os.path.join(download_dir, filename)
+    with open(pdf_path, "wb") as f:
+        f.write(base64.b64decode(pdf['data']))
+
+    print(f"✅ Ders Programı PDF kaydedildi: {pdf_path}")
+    return pdf_path
 
 # İlk giriş denemesi
 try_login()
