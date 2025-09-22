@@ -97,17 +97,14 @@ def try_login():
 
 # Ders Programı PDF indirme fonksiyonu (CDP ile direkt PDF)
 def download_ders_programi_pdf(filename):
-    # Önce Ders Programı aç
     ders_prog_btn = driver.find_element(By.CSS_SELECTOR, "button.solbtn")
-    ders_prog_btn.click()
+    driver.execute_script("arguments[0].click();", ders_prog_btn)
     time.sleep(2)
 
-    # Yazdır butonuna bas
     yazdir_btn = driver.find_element(By.CSS_SELECTOR, "button.btn.btn-info")
-    yazdir_btn.click()
+    driver.execute_script("arguments[0].click();", yazdir_btn)
     time.sleep(2)
 
-    # Print Preview yerine CDP ile PDF al
     pdf = driver.execute_cdp_cmd("Page.printToPDF", {
         "format": "A4",
         "printBackground": True
@@ -129,21 +126,20 @@ while True:
     try:
         try_login()
 
-        # 1) Field Elective -> SEÇ butonuna tıkla
+        # 1) Field Elective -> SEÇ butonuna tıkla (modal açılır)
         field_button = driver.find_element(By.CSS_SELECTOR, "span.label.label-important")
-        field_button.click()
+        driver.execute_script("arguments[0].click();", field_button)
         print(">>> Field Elective SEÇ butonuna basıldı.")
-        time.sleep(1)
+        time.sleep(2)
 
-        # 2) Ayşe Salman şubesi -> Şubeyi Seç
+        # 2) Ayşe Salman satırını bul ve şubeyi seç
         rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
         clicked = False
         for row in rows:
             row_text = row.text.lower()
-            print("Satır içeriği:", row_text)  # debug için
             if "salman" in row_text:   # soyadına göre kontrol
                 select_button = row.find_element(By.CSS_SELECTOR, "button")
-                select_button.click()
+                driver.execute_script("arguments[0].click();", select_button)
                 print(">>> Ayşe Salman şubesi seçildi, kontrol ediliyor...")
                 clicked = True
                 time.sleep(2)
@@ -151,9 +147,12 @@ while True:
 
         if not clicked:
             print("⚠️ Ayşe Salman bulunamadı, fallback ile btnuzunluk tıklanıyor...")
-            section_button = driver.find_element(By.ID, "btnuzunluk")
-            section_button.click()
-            time.sleep(2)
+            try:
+                section_button = driver.find_element(By.ID, "btnuzunluk")
+                driver.execute_script("arguments[0].click();", section_button)
+                time.sleep(2)
+            except:
+                print("❌ Fallback butonu da bulunamadı!")
 
         # 3) Kontenjan uyarısını kontrol et
         try:
