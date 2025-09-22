@@ -1,7 +1,7 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time, base64, requests, datetime, glob, os
@@ -47,7 +47,6 @@ def send_mail(subject, text, screenshot_path, pdf_path=None):
             }
         ]
     }
-
     r = requests.post(url, auth=(MAILJET_API_KEY, MAILJET_SECRET_KEY), json=payload)
     print("Mail gönderildi:", r.status_code, r.text)
 
@@ -86,99 +85,123 @@ def try_login():
         username_box = driver.find_element(By.ID, "inputUsername")
         password_box = driver.find_element(By.ID, "inputPassword")
         login_btn = driver.find_element(By.CLASS_NAME, "login_btn")
-
         username_box.send_keys(config.USERNAME)
         password_box.send_keys(config.PASSWORD)
-        login_btn.click()
+        driver.execute_script("arguments[0].click();", login_btn)
         print(">>> Login yapıldı.")
-        time.sleep(5)
+        WebDriverWait(driver, 10).until_not(
+            EC.presence_of_element_located((By.ID, "inputUsername"))
+        )
+        time.sleep(2)
     except NoSuchElementException:
         pass
 
-# Ders Programı PDF indirme fonksiyonu (CDP ile direkt PDF)
+# --- Yardımcı: Field Elective modalını güvenli aç ---
+def open_fe_modal():
+    fe_btn = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, "span.label.label-important"))
+    )
+    driver.execute_script("arguments[0].click();", fe_btn)
+    print(">>> Field Elective SEÇ butonuna basıldı.")
+    # Açık modalı bekle
+    WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located((
+            By.XPATH,
+            "//div[contains(@class,'modal') and (contains(@class,'show') or contains(@style,'display: block'))]"
+        ))
+    )
+
+# --- Yardımcı: Açık modalda 'Ayşe SALMAN' satırının 'Şubeyi Seç' butonuna bas ---
+def click_salman_in_modal() -> bool:
+    try:
+        # Türkçe harfler için case-insensitive eşleştirme
+        button = WebDriverWait(driver, 8).until(EC.element_to_be_clickable((
+            By.XPATH,
+            "//div[contains(@class,'modal') and (contains(@class,'show') or contains(@style,'display: block'))]"
+            "//tr[td[contains(translate(normalize-space(.), "
+            "'ABCDEFGHIJKLMNOPQRSTUVWXYZÇĞİÖŞÜ', 'abcdefghijklmnopqrstuvwxyzçğiöşü'), 'salman')]]"
+            "//button"
+        )))
+        driver.execute_script("arguments[0].click();", button)
+        print(">>> Ayşe Salman şubesi seçildi, kontrol ediliyor...")
+        time.sleep(1.5)
+        return True
+    except Exception as e:
+        print("⚠️ Ayşe Salman bulunamadı (", type(e).__name__, ")")
+        return False
+
+# --- Ders Programı PDF indirme (CDP ile direkt PDF) ---
 def download_ders_programi_pdf(filename):
-    ders_prog_btn = driver.find_element(By.CSS_SELECTOR, "button.solbtn")
+    ders_prog_btn = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, "button.solbtn"))
+    )
     driver.execute_script("arguments[0].click();", ders_prog_btn)
-    time.sleep(2)
 
-    yazdir_btn = driver.find_element(By.CSS_SELECTOR, "button.btn.btn-info")
+    yazdir_btn = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn.btn-info"))
+    )
     driver.execute_script("arguments[0].click();", yazdir_btn)
-    time.sleep(2)
+    time.sleep(1)
 
-    pdf = driver.execute_cdp_cmd("Page.printToPDF", {
-        "format": "A4",
-        "printBackground": True
-    })
-
+    pdf = driver.execute_cdp_cmd("Page.printToPDF", {"format": "A4", "printBackground": True})
     pdf_path = os.path.join(download_dir, filename)
     with open(pdf_path, "wb") as f:
         f.write(base64.b64decode(pdf['data']))
-
     print(f"✅ Ders Programı PDF kaydedildi: {pdf_path}")
     return pdf_path
 
-# İlk giriş denemesi
+# İlk giriş
 try_login()
 
-# --- Döngü ---
+# --- Ana Döngü ---
 last_mail_time = 0
 while True:
     try:
         try_login()
 
-        # 1) Field Elective -> SEÇ butonuna tıkla (modal açılır)
-        field_button = driver.find_element(By.CSS_SELECTOR, "span.label.label-important")
-        driver.execute_script("arguments[0].click();", field_button)
-        print(">>> Field Elective SEÇ butonuna basıldı.")
-        time.sleep(2)
+        # 1) Modalı aç
+        open_fe_modal()
 
-        # 2) Ayşe Salman satırını bul ve şubeyi seç
-        rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
-        clicked = False
-        for row in rows:
-            row_text = row.text.lower()
-            if "salman" in row_text:   # soyadına göre kontrol
-                select_button = row.find_element(By.CSS_SELECTOR, "button")
-                driver.execute_script("arguments[0].click();", select_button)
-                print(">>> Ayşe Salman şubesi seçildi, kontrol ediliyor...")
-                clicked = True
-                time.sleep(2)
-                break
-
+        # 2) Ayşe Salman satırındaki butona bas; olmazsa fallback
+        clicked = click_salman_in_modal()
         if not clicked:
-            print("⚠️ Ayşe Salman bulunamadı, fallback ile btnuzunluk tıklanıyor...")
             try:
-                section_button = driver.find_element(By.ID, "btnuzunluk")
-                driver.execute_script("arguments[0].click();", section_button)
-                time.sleep(2)
-            except:
-                print("❌ Fallback butonu da bulunamadı!")
+                fb = WebDriverWait(driver, 3).until(
+                    EC.element_to_be_clickable((By.ID, "btnuzunluk"))
+                )
+                driver.execute_script("arguments[0].click();", fb)
+                time.sleep(1.5)
+            except Exception:
+                print("❌ Fallback 'btnuzunluk' da bulunamadı!")
 
-        # 3) Kontenjan uyarısını kontrol et
+        # 3) Kontenjan uyarısı varsa işle
         try:
-            warning = driver.find_element(By.ID, "swal2-content")
+            warning = WebDriverWait(driver, 2).until(
+                EC.presence_of_element_located((By.ID, "swal2-content"))
+            )
             if "Kontenjanı kalmadığı için" in warning.text:
                 print("⚠️ Kontenjan yok!")
-
                 try:
                     ok_btn = WebDriverWait(driver, 5).until(
                         EC.element_to_be_clickable((By.CSS_SELECTOR, "button.swal2-confirm.swal2-styled"))
                     )
-                    ok_btn.click()
-                except:
-                    ok_btn = driver.find_element(By.CSS_SELECTOR, "button.swal2-confirm.swal2-styled")
                     driver.execute_script("arguments[0].click();", ok_btn)
+                except Exception:
+                    try:
+                        ok_btn = driver.find_element(By.CSS_SELECTOR, "button.swal2-confirm.swal2-styled")
+                        driver.execute_script("arguments[0].click();", ok_btn)
+                    except Exception:
+                        pass
 
                 now = time.time()
-                if now - last_mail_time > 600:  
+                if now - last_mail_time > 600:
                     clean_old_files("kontenjan_yok_*.png")
+                    clean_old_files(os.path.join(download_dir, "ders_programi_*.pdf"))
 
-                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                    screenshot = f"kontenjan_yok_{timestamp}.png"
+                    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    screenshot = f"kontenjan_yok_{ts}.png"
                     driver.save_screenshot(screenshot)
-
-                    pdf_file = download_ders_programi_pdf(f"ders_programi_{timestamp}.pdf")
-
+                    pdf_file = download_ders_programi_pdf(f"ders_programi_{ts}.pdf")
                     send_mail("Kontenjan Hâlâ Dolu",
                               "Kontenjan açılmadı, ders seçilemedi.",
                               screenshot,
@@ -186,29 +209,32 @@ while True:
                     last_mail_time = now
 
                 driver.refresh()
-                time.sleep(3)
+                time.sleep(2.5)
                 continue
-
-        except NoSuchElementException:
-            # Uyarı yok → ders seçildi
+        except Exception:
+            # Uyarı elementi bulunmadıysa ders seçilmiş olabilir
             print("🎉 Ders başarıyla seçildi!")
-
             clean_old_files("ders_secilmis_*.png")
+            clean_old_files(os.path.join(download_dir, "ders_programi_*.pdf"))
 
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            screenshot = f"ders_secilmis_{timestamp}.png"
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            screenshot = f"ders_secilmis_{ts}.png"
             driver.save_screenshot(screenshot)
-
-            pdf_file = download_ders_programi_pdf(f"ders_programi_{timestamp}.pdf")
-
+            pdf_file = download_ders_programi_pdf(f"ders_programi_{ts}.pdf")
             send_mail("SEÇİLDİ BU İŞ TAMAMDIR KOÇUM!",
                       "Ders başarıyla seçildi! Artık uğraşma 🎉",
                       screenshot,
                       pdf_file)
             break
 
-    except Exception as e:
-        print(f"Hata oluştu: {e}")
+    except StaleElementReferenceException:
+        # DOM yenilendiyse başa sar
+        print("↻ DOM yenilendi, tekrar deniyorum...")
         driver.refresh()
-        time.sleep(5)
+        time.sleep(2)
+        continue
+    except Exception as e:
+        print(f"Hata oluştu: {e.__class__.__name__}: {e}")
+        driver.refresh()
+        time.sleep(3)
         continue
