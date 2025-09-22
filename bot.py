@@ -95,7 +95,7 @@ def try_login():
     except NoSuchElementException:
         pass
 
-# Ders Programı PDF indirme fonksiyonu
+# Ders Programı PDF indirme fonksiyonu (CDP ile direkt PDF)
 def download_ders_programi_pdf(filename):
     # Önce Ders Programı aç
     ders_prog_btn = driver.find_element(By.CSS_SELECTOR, "button.solbtn")
@@ -107,7 +107,7 @@ def download_ders_programi_pdf(filename):
     yazdir_btn.click()
     time.sleep(2)
 
-    # Burada normalde print preview açılır ama biz CDP ile direkt PDF alıyoruz
+    # Print Preview yerine CDP ile PDF al
     pdf = driver.execute_cdp_cmd("Page.printToPDF", {
         "format": "A4",
         "printBackground": True
@@ -136,10 +136,22 @@ while True:
         time.sleep(1)
 
         # 2) Ayşe Salman şubesi -> Şubeyi Seç
-        section_button = driver.find_element(By.ID, "btnuzunluk")
-        section_button.click()
-        print(">>> Ayşe Salman şubesi seçildi, kontrol ediliyor...")
-        time.sleep(2)
+        rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
+        clicked = False
+        for row in rows:
+            if "Ayşe SALMAN" in row.text:
+                select_button = row.find_element(By.CSS_SELECTOR, "button")
+                select_button.click()
+                print(">>> Ayşe Salman şubesi seçildi, kontrol ediliyor...")
+                clicked = True
+                time.sleep(2)
+                break
+
+        if not clicked:
+            print("⚠️ Ayşe Salman bulunamadı, fallback ile btnuzunluk tıklanıyor...")
+            section_button = driver.find_element(By.ID, "btnuzunluk")
+            section_button.click()
+            time.sleep(2)
 
         # 3) Kontenjan uyarısını kontrol et
         try:
@@ -147,7 +159,6 @@ while True:
             if "Kontenjanı kalmadığı için" in warning.text:
                 print("⚠️ Kontenjan yok!")
 
-                # "Tamam" butonuna bas
                 try:
                     ok_btn = WebDriverWait(driver, 5).until(
                         EC.element_to_be_clickable((By.CSS_SELECTOR, "button.swal2-confirm.swal2-styled"))
