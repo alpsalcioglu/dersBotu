@@ -95,7 +95,7 @@ def try_login():
     except NoSuchElementException:
         pass
 
-# --- Ders Programı PDF indirme ---
+# Ders Programı PDF indirme fonksiyonu (CDP ile direkt PDF)
 def download_ders_programi_pdf(filename):
     ders_prog_btn = driver.find_element(By.CSS_SELECTOR, "button.solbtn")
     driver.execute_script("arguments[0].click();", ders_prog_btn)
@@ -117,38 +117,6 @@ def download_ders_programi_pdf(filename):
     print(f"✅ Ders Programı PDF kaydedildi: {pdf_path}")
     return pdf_path
 
-# --- Field Elective modal açma ---
-def open_fe_modal():
-    field_button = driver.find_element(By.CSS_SELECTOR, "span.label.label-important")
-    driver.execute_script("arguments[0].click();", field_button)
-    print(">>> Field Elective SEÇ butonuna basıldı.")
-
-    # Modal açılana kadar bekle
-    WebDriverWait(driver, 10).until(
-        EC.visibility_of_element_located((By.CSS_SELECTOR, "div.modal.show"))
-    )
-    time.sleep(1)
-
-# --- Ayşe Salman satırını bul ve tıkla ---
-def click_salman_in_modal():
-    try:
-        rows = WebDriverWait(driver, 10).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "table tbody tr"))
-        )
-        for row in rows:
-            row_text = row.text.lower()
-            if "salman" in row_text:
-                select_button = row.find_element(By.CSS_SELECTOR, "button")
-                driver.execute_script("arguments[0].click();", select_button)
-                print(">>> Ayşe Salman şubesi seçildi, kontrol ediliyor...")
-                time.sleep(2)
-                return True
-        print("⚠️ Ayşe Salman bulunamadı!")
-        return False
-    except TimeoutException:
-        print("❌ Modal yüklenemedi (Timeout).")
-        return False
-
 # İlk giriş denemesi
 try_login()
 
@@ -158,30 +126,59 @@ while True:
     try:
         try_login()
 
-        # Modal aç
-        open_fe_modal()
+        # Sayfayı her döngüde hard refresh et
+        driver.get(config.URL)
+        time.sleep(3)
 
-        # Ayşe Salman satırı bul
-        if not click_salman_in_modal():
-            driver.refresh()
-            time.sleep(3)
+        # 1) Field Elective -> SEÇ butonuna tıkla (modal açılır)
+        field_button = driver.find_element(By.CSS_SELECTOR, "span.label.label-important")
+        driver.execute_script("arguments[0].click();", field_button)
+        print(">>> Field Elective SEÇ butonuna basıldı.")
+        time.sleep(2)
+
+        # 2) Ayşe Salman satırını bul ve şubeyi seç
+        rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
+        clicked = False
+        for row in rows:
+            row_text = row.text.lower()
+            if "salman" in row_text:
+                select_button = row.find_element(By.CSS_SELECTOR, "button")
+                driver.execute_script("arguments[0].click();", select_button)
+                print(">>> Ayşe Salman şubesi seçildi, kontrol ediliyor...")
+                clicked = True
+                time.sleep(2)
+                break
+
+        if not clicked:
+            print("⚠️ Ayşe Salman bulunamadı!")
             continue
 
-        # Kontenjan kontrolü
+        # 3) Kontenjan uyarısını kontrol et
         try:
             warning = driver.find_element(By.ID, "swal2-content")
             if "Kontenjanı kalmadığı için" in warning.text:
                 print("⚠️ Kontenjan yok!")
 
+                # Önce Tamam butonuna bas
                 try:
                     ok_btn = WebDriverWait(driver, 5).until(
                         EC.element_to_be_clickable((By.CSS_SELECTOR, "button.swal2-confirm.swal2-styled"))
                     )
-                    ok_btn.click()
-                except:
-                    ok_btn = driver.find_element(By.CSS_SELECTOR, "button.swal2-confirm.swal2-styled")
                     driver.execute_script("arguments[0].click();", ok_btn)
+                    print(">>> Tamam butonuna basıldı.")
+                except:
+                    print("❌ Tamam butonu bulunamadı!")
 
+                # Modal kapanana kadar bekle
+                try:
+                    WebDriverWait(driver, 10).until_not(
+                        EC.visibility_of_element_located((By.CSS_SELECTOR, "div.modal.show"))
+                    )
+                    print(">>> Modal kapandı.")
+                except TimeoutException:
+                    print("❌ Modal kapanmadı, hard refresh zorunlu!")
+
+                # Mail gönder
                 now = time.time()
                 if now - last_mail_time > 600:  
                     clean_old_files("kontenjan_yok_*.png")
@@ -198,7 +195,8 @@ while True:
                               pdf_file)
                     last_mail_time = now
 
-                driver.refresh()
+                # Hard refresh
+                driver.get(config.URL)
                 time.sleep(3)
                 continue
 
@@ -222,6 +220,6 @@ while True:
 
     except Exception as e:
         print(f"Hata oluştu: {e}")
-        driver.refresh()
+        driver.get(config.URL)
         time.sleep(5)
         continue
