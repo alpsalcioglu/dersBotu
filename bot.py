@@ -135,23 +135,31 @@ while True:
         print(">>> Field Elective SEÇ butonuna basıldı.")
         time.sleep(1)
 
-        # 2) Ayşe Salman şubesi -> Şubeyi Seç
-        rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
-        clicked = False
-        for row in rows:
-            if "Ayşe SALMAN" in row.text:
-                select_button = row.find_element(By.CSS_SELECTOR, "button")
-                select_button.click()
-                print(">>> Ayşe Salman şubesi seçildi, kontrol ediliyor...")
-                clicked = True
-                time.sleep(2)
-                break
+     # 2) Ayşe Salman şubesi -> Şubeyi Seç
+rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr")
+clicked = False
+for row in rows:
+    row_text = row.text.lower()
+    print("Satır içeriği:", row_text)  # debug için
+    if "salman" in row_text:   # sadece soyadına bakıyoruz
+        select_button = row.find_element(By.CSS_SELECTOR, "button")
+        select_button.click()
+        print(">>> Ayşe Salman şubesi seçildi, kontrol ediliyor...")
+        clicked = True
+        time.sleep(2)
+        break
 
-        if not clicked:
-            print("⚠️ Ayşe Salman bulunamadı, fallback ile btnuzunluk tıklanıyor...")
-            section_button = driver.find_element(By.ID, "btnuzunluk")
-            section_button.click()
-            time.sleep(2)
+if not clicked:
+    print("⚠️ Ayşe Salman bulunamadı, fallback ile btnuzunluk tıklanıyor...")
+    section_button = driver.find_element(By.ID, "btnuzunluk")
+    section_button.click()
+    time.sleep(2)
+
+if not clicked:
+    print("⚠️ Ayşe Salman bulunamadı, fallback ile btnuzunluk tıklanıyor...")
+    section_button = driver.find_element(By.ID, "btnuzunluk")
+    section_button.click()
+    time.sleep(2)
 
         # 3) Kontenjan uyarısını kontrol et
         try:
