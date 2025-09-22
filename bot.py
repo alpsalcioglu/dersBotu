@@ -98,21 +98,21 @@ def try_login():
 
 def open_fe_modal():
     """Field Elective modalını aç ve tam yüklenmesini bekle."""
-    fe = WebDriverWait(driver, 12).until(
+    fe = WebDriverWait(driver, 15).until(
         EC.element_to_be_clickable((By.CSS_SELECTOR, "span.label.label-important"))
     )
     js_click(fe)
     print(">>> Field Elective SEÇ butonuna basıldı.")
 
-    # modal + tablo satırları
-    WebDriverWait(driver, 12).until(
+    # Modalın gerçekten açılmasını bekle
+    WebDriverWait(driver, 15).until(
         EC.visibility_of_element_located((By.XPATH, "//div[contains(@class,'modal') and contains(@class,'show')]"))
     )
-    WebDriverWait(driver, 12).until(
+    WebDriverWait(driver, 15).until(
         EC.presence_of_all_elements_located((By.XPATH,
             "//div[contains(@class,'modal') and contains(@class,'show')]//table//tr"))
     )
-    time.sleep(0.3)
+    time.sleep(1)  #
 
 def click_salman_in_modal():
     """Açık modaldaki SALMAN satırındaki 'Şubeyi Seç'e bas."""
@@ -161,6 +161,11 @@ def force_close_modal():
             EC.visibility_of_element_located((By.XPATH, "//div[contains(@class,'modal') and contains(@class,'show')]"))
         )
         print(">>> Modal kapandı.")
+        # 🔑 DOM stabilize olsun
+        WebDriverWait(driver, 10).until(
+            lambda d: d.execute_script("return document.readyState") == "complete"
+        )
+        time.sleep(2)  # ekstra buffer
     except TimeoutException:
         print("❌ Modal kapanmadı (hard refresh).")
         hard_refresh()
